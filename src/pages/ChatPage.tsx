@@ -143,14 +143,14 @@ const ChatPage = () => {
   };
   
   // Legacy generateAIResponse function - to be removed after migration
-  const generateAIResponse = (userMessage: string) => {
+  const legacyGenerateAIResponse = (userMessage: string) => {
     if (!profile) {
       setIsLoading(false);
       return;
     }
     
     // Generate response based on profile data and mode
-    let aiResponse;
+    let aiResponse: string;
     
     if (trollMode) {
       // Generate a sarcastic/witty response

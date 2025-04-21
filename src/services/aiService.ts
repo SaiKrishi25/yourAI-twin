@@ -57,7 +57,12 @@ export const generateAIResponse = async (
       });
 
       const data = await response.json();
-      return data.choices[0].message.content;
+      
+      if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+        throw new Error("Invalid response from OpenAI API");
+      }
+      
+      return data.choices[0].message.content || "Sorry, I couldn't generate a response.";
     } catch (error) {
       console.error("Error calling OpenAI:", error);
       return generateFallbackResponse(message, persona);
