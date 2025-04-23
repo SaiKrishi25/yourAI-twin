@@ -1,6 +1,22 @@
-
-// AI Service for connecting to OpenAI and generating persona-based responses
+import { pipeline, env } from '@huggingface/transformers';
 import { AIPersonaConfig } from '@/types/ai';
+
+// Configure transformers to use WebGPU if available
+env.useBrowserCache = true;
+env.backends.onnx.wasm.numThreads = 4;
+
+let model: any = null;
+
+const initializeModel = async () => {
+  if (!model) {
+    model = await pipeline(
+      'text-generation',
+      'deepseek-ai/deepseek-coder-1.3b-base',
+      { device: 'webgpu' }
+    );
+  }
+  return model;
+};
 
 export const generateSystemPrompt = (persona: AIPersonaConfig): string => {
   // Create a system prompt based on user profile
@@ -27,53 +43,27 @@ Always stay in character and respond as if you are ${persona.name}. Don't break 
 
 export const generateAIResponse = async (
   message: string, 
-  persona: AIPersonaConfig,
-  apiKey?: string
+  persona: AIPersonaConfig
 ): Promise<string> => {
-  // If we have an API key, use the OpenAI API
-  if (apiKey) {
-    try {
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`
-        },
-        body: JSON.stringify({
-          model: 'gpt-4o-mini',
-          messages: [
-            {
-              role: 'system',
-              content: generateSystemPrompt(persona)
-            },
-            {
-              role: 'user',
-              content: message
-            }
-          ],
-          temperature: persona.trollMode ? 0.9 : 0.7,
-          max_tokens: 300
-        })
-      });
+  try {
+    const llm = await initializeModel();
+    const systemPrompt = generateSystemPrompt(persona);
+    
+    const fullPrompt = `${systemPrompt}\n\nUser: ${message}\nAssistant:`;
+    const result = await llm(fullPrompt, {
+      max_new_tokens: 200,
+      temperature: persona.trollMode ? 0.9 : 0.7,
+      do_sample: true,
+    });
 
-      const data = await response.json();
-      
-      if (!data.choices || !data.choices[0] || !data.choices[0].message) {
-        throw new Error("Invalid response from OpenAI API");
-      }
-      
-      return data.choices[0].message.content || "Sorry, I couldn't generate a response.";
-    } catch (error) {
-      console.error("Error calling OpenAI:", error);
-      return generateFallbackResponse(message, persona);
-    }
-  } else {
-    // If no API key, use fallback response generation
+    return result[0].generated_text || generateFallbackResponse(message, persona);
+  } catch (error) {
+    console.error("Error generating response:", error);
     return generateFallbackResponse(message, persona);
   }
 };
 
-// Generate a fallback response if OpenAI API is not available
+// Generate a fallback response if model is not available
 const generateFallbackResponse = (message: string, persona: AIPersonaConfig): string => {
   const lowercaseMessage = message.toLowerCase();
   let response = "";
